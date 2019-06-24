@@ -133,6 +133,7 @@ var (
 		DBFilesCacheCapacity:      100,
 		NumLowFeeTxnPerBlock:      4,
 		MinTxnFee:                 10000000,
+		WebServicePort:            30000,
 	}
 )
 
@@ -177,6 +178,7 @@ type Configuration struct {
 	WalletFile                string        `json:"WalletFile"`
 	MaxGetIDSeeds             uint32        `json:"MaxGetIDSeeds"`
 	DBFilesCacheCapacity      int           `json:"DBFilesCacheCapacity"`
+	WebServicePort            uint16        `json:"WebServicePort"`
 }
 
 func Init() error {
