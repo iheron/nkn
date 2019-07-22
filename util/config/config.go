@@ -5,6 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	gonat "github.com/nknorg/go-nat"
+	portscanner "github.com/nknorg/go-portscanner"
+	"github.com/nknorg/nkn/common"
+	. "github.com/nknorg/nkn/common"
+	"github.com/nknorg/nkn/crypto/ed25519"
+	"github.com/nknorg/nkn/crypto/ed25519/vrf"
+	"github.com/nknorg/nkn/crypto/util"
+	"github.com/nknorg/nnet/transport"
+	"github.com/pbnjay/memory"
 	"io/ioutil"
 	"log"
 	"net"
@@ -12,15 +21,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	gonat "github.com/nknorg/go-nat"
-	portscanner "github.com/nknorg/go-portscanner"
-	"github.com/nknorg/nkn/common"
-	"github.com/nknorg/nkn/crypto/ed25519"
-	"github.com/nknorg/nkn/crypto/ed25519/vrf"
-	"github.com/nknorg/nkn/crypto/util"
-	"github.com/nknorg/nnet/transport"
-	"github.com/pbnjay/memory"
 )
 
 const DefaultConfigFile = "config.json"
@@ -135,7 +135,7 @@ var (
 		WalletFile:                   "wallet.json",
 		MaxGetIDSeeds:                3,
 		DBFilesCacheCapacity:         100,NumLowFeeTxnPerBlock:      4,
-		MinTxnFee:                 10000000,
+		MinTxnFee:                    10000000,
 		AllowEmptyBeneficiaryAddress: false,
 		WebGuiListenAddress:          "127.0.0.1",
 		WebGuiPort:                   30000,
@@ -462,16 +462,21 @@ func (config *Configuration) CheckPorts(myIP string) (bool, error) {
 	return true, nil
 }
 
-func OpenConfigFile() ([]byte, error) {
-	var file []byte
-
+func GetConfigFile() string {
 	configFile := ConfigFile
 	if configFile == "" {
 		configFile = DefaultConfigFile
 	}
+	return configFile
+}
+
+func OpenConfigFile() ([]byte, error) {
+	var file []byte
+
+	configFile := GetConfigFile()
 	_, err := os.Stat(configFile)
 	if err != nil {
-		return file, err
+		return nil, err
 	}
 	file, err = ioutil.ReadFile(configFile)
 	if err != nil {
@@ -480,14 +485,50 @@ func OpenConfigFile() ([]byte, error) {
 
 	// Remove the UTF-8 Byte Order Mark
 	file = bytes.TrimPrefix(file, []byte("\xef\xbb\xbf"))
-	return file, err
+	return file, nil
 
 }
 
-func WriteConfigFile(data []byte) error {
-	configFile := ConfigFile
-	if configFile == "" {
-		configFile = DefaultConfigFile
+func WriteConfigFile(configuration map[string]interface{}) error {
+	bytes, err := json.MarshalIndent(&configuration, "", "    ")
+	if err != nil {
+		return err
 	}
-	return ioutil.WriteFile(configFile, data, 0666)
+	configFile := GetConfigFile()
+	return ioutil.WriteFile(configFile, bytes, 0666)
+}
+
+func SetBeneficiaryAddr(addr string, allowEmpty bool) error {
+	if allowEmpty {
+		if addr == "" {
+			return errors.New("beneficiary address is empty.")
+		}
+	}
+
+	if addr != "" {
+		_, err := ToScriptHash(addr)
+		if err != nil {
+			return errors.New(fmt.Sprintf("parse BeneficiaryAddr error: %v", err))
+		}
+	}
+
+	file, err := OpenConfigFile()
+	if err != nil {
+		return errors.New("Config file not exists.")
+	}
+	var configuration map[string]interface{}
+	err = json.Unmarshal(file, &configuration)
+	if err != nil {
+		return err
+	}
+
+	// set beneficiary address
+	configuration["BeneficiaryAddr"] = addr
+
+	err = WriteConfigFile(configuration)
+	if err != nil {
+		return err
+	}
+	Parameters.BeneficiaryAddr = addr
+	return nil
 }
